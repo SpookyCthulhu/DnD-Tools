@@ -5,7 +5,6 @@ import { useDropzone } from 'react-dropzone';
 
 const MapTool = () => {
   const [backgroundImage, setBackgroundImage] = useState(null);
-  const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [tokens, setTokens] = useState([]);
   const [draggedToken, setDraggedToken] = useState(null);
   const [gridSize, setGridSize] = useState(40);
@@ -14,6 +13,9 @@ const MapTool = () => {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [showTokenCreator, setShowTokenCreator] = useState(false);
+  const [newTokenColor, setNewTokenColor] = useState('#ff0000');
+  const [newTokenLabel, setNewTokenLabel] = useState('');
   const mapRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -24,14 +26,6 @@ const MapTool = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         setBackgroundImage(e.target.result);
-        
-        // Get image dimensions
-        const img = new Image();
-        img.onload = () => {
-          setImageDimensions({ width: img.width, height: img.height });
-        };
-        img.src = e.target.result;
-        
         // Reset pan and zoom when new image is loaded
         setPanOffset({ x: 0, y: 0 });
         setZoom(1);
@@ -48,19 +42,29 @@ const MapTool = () => {
     multiple: false
   });
 
-  // Add new token
-  const addToken = (color) => {
+  // Create new token
+  const createToken = () => {
+    if (!newTokenLabel.trim()) {
+      alert('Please enter a label for the token');
+      return;
+    }
+
     const newToken = {
       id: Date.now(),
-      x: 100,
-      y: 100,
-      color: color,
-      size: gridSize * 0.9 // Fixed size relative to grid, not zoom
+      x: 200,
+      y: 200,
+      color: newTokenColor,
+      label: newTokenLabel.trim(),
+      size: gridSize * 0.9
     };
     setTokens([...tokens, newToken]);
+    
+    // Reset form
+    setNewTokenLabel('');
+    setShowTokenCreator(false);
   };
 
-  // Update token sizes when grid size changes (but not zoom)
+  // Update token sizes when grid size changes
   useEffect(() => {
     setTokens(prevTokens => prevTokens.map(token => ({
       ...token,
@@ -86,7 +90,6 @@ const MapTool = () => {
   const handlePanStart = (e) => {
     if (draggedToken) return; // Don't pan while dragging token
     
-    e.preventDefault();
     setIsPanning(true);
     setPanStart({
       x: e.clientX - panOffset.x,
@@ -97,22 +100,18 @@ const MapTool = () => {
   // Handle mouse move for dragging and panning
   const handleMouseMove = (e) => {
     if (draggedToken) {
-      // Token dragging
+      // Token dragging - free movement, no grid snapping
       const rect = mapRef.current.getBoundingClientRect();
       const newX = e.clientX - rect.left - draggedToken.offsetX;
       const newY = e.clientY - rect.top - draggedToken.offsetY;
 
-      // Snap to grid (using base grid size, not zoomed)
-      const snappedX = Math.round(newX / gridSize) * gridSize;
-      const snappedY = Math.round(newY / gridSize) * gridSize;
-
       setTokens(tokens.map(token => 
         token.id === draggedToken.id 
-          ? { ...token, x: snappedX, y: snappedY }
+          ? { ...token, x: newX, y: newY }
           : token
       ));
     } else if (isPanning) {
-      // Map panning - fixed calculation
+      // Map panning
       setPanOffset({
         x: e.clientX - panStart.x,
         y: e.clientY - panStart.y
@@ -139,35 +138,7 @@ const MapTool = () => {
     setTokens(tokens.filter(token => token.id !== tokenId));
   };
 
-  // Calculate the actual displayed image size for grid boundaries
-  const getDisplayedImageSize = () => {
-    if (!imageDimensions.width || !imageDimensions.height) return { width: 0, height: 0 };
-    
-    const containerElement = containerRef.current;
-    if (!containerElement) return { width: 0, height: 0 };
-    
-    const containerWidth = containerElement.clientWidth;
-    const containerHeight = containerElement.clientHeight;
-    
-    const imageAspectRatio = imageDimensions.width / imageDimensions.height;
-    const containerAspectRatio = containerWidth / containerHeight;
-    
-    let displayWidth, displayHeight;
-    
-    if (imageAspectRatio > containerAspectRatio) {
-      // Image is wider than container ratio
-      displayWidth = containerWidth;
-      displayHeight = containerWidth / imageAspectRatio;
-    } else {
-      // Image is taller or same ratio as container
-      displayHeight = containerHeight;
-      displayWidth = containerHeight * imageAspectRatio;
-    }
-    
-    return { width: displayWidth, height: displayHeight };
-  };
-
-  // Generate grid pattern - fixed to base grid size
+  // Generate grid pattern
   const generateGridPattern = () => {
     if (!showGrid) return '';
     
@@ -183,10 +154,8 @@ const MapTool = () => {
     setPanOffset({ x: 0, y: 0 });
   };
 
-  const displayedImageSize = getDisplayedImageSize();
-
   return (
-    <div className="w-full h-screen bg-gray-100 flex flex-col select-none">
+    <div className="w-full h-screen bg-gray-100 flex flex-col">
       {/* Controls */}
       <div className="bg-white shadow-md p-4 flex flex-wrap items-center gap-4 flex-shrink-0">
         <h1 className="text-xl font-bold">D&D Map Tool</h1>
@@ -236,18 +205,41 @@ const MapTool = () => {
           <span className="text-sm">Show Grid</span>
         </label>
 
-        {/* Token controls */}
+        {/* Token creation */}
         <div className="flex items-center gap-2">
-          <span className="text-sm">Add Token:</span>
-          {['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'black'].map(color => (
-            <button
-              key={color}
-              onClick={() => addToken(color)}
-              className="w-8 h-8 rounded-full border-2 border-gray-300 hover:border-gray-500"
-              style={{ backgroundColor: color }}
-              title={`Add ${color} token`}
-            />
-          ))}
+          <button
+            onClick={() => setShowTokenCreator(!showTokenCreator)}
+            className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+          >
+            {showTokenCreator ? 'Cancel' : 'Create Token'}
+          </button>
+          
+          {showTokenCreator && (
+            <>
+              <input
+                type="color"
+                value={newTokenColor}
+                onChange={(e) => setNewTokenColor(e.target.value)}
+                className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
+                title="Choose token color"
+              />
+              <input
+                type="text"
+                placeholder="Token label"
+                value={newTokenLabel}
+                onChange={(e) => setNewTokenLabel(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && createToken()}
+                className="px-2 py-1 border border-gray-300 rounded text-sm w-24"
+                maxLength="10"
+              />
+              <button
+                onClick={createToken}
+                className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+              >
+                Add
+              </button>
+            </>
+          )}
         </div>
 
         <button
@@ -302,50 +294,62 @@ const MapTool = () => {
               onMouseLeave={handleMouseUp}
               onWheel={handleWheel}
             >
-              {/* Grid overlay - only covers the actual image area */}
-              {showGrid && displayedImageSize.width > 0 && displayedImageSize.height > 0 && (
+              {/* Grid overlay */}
+              {showGrid && (
                 <div
-                  className="absolute pointer-events-none"
+                  className="absolute inset-0 pointer-events-none"
                   style={{
                     backgroundImage: generateGridPattern(),
                     backgroundSize: `${gridSize}px ${gridSize}px`,
-                    width: `${displayedImageSize.width}px`,
-                    height: `${displayedImageSize.height}px`,
-                    left: '50%',
-                    top: '50%',
-                    transform: 'translate(-50%, -50%)'
+                    backgroundClip: 'content-box'
                   }}
                 />
               )}
 
               {/* Tokens */}
               {tokens.map(token => (
-                <div
-                  key={token.id}
-                  className="absolute cursor-move border-2 border-white shadow-lg hover:shadow-xl transition-shadow rounded-full flex items-center justify-center text-white font-bold text-xs select-none"
-                  style={{
-                    left: token.x,
-                    top: token.y,
-                    width: token.size,
-                    height: token.size,
-                    backgroundColor: token.color,
-                    transform: 'translate(-50%, -50%)',
-                    fontSize: `${Math.max(8, token.size * 0.3)}px`
-                  }}
-                  onMouseDown={(e) => handleTokenMouseDown(e, token.id)}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    removeToken(token.id);
-                  }}
-                  title="Drag to move, double-click to remove"
-                >
-                  {token.color.charAt(0).toUpperCase()}
+                <div key={token.id} className="absolute">
+                  {/* Token label */}
+                  <div
+                    className="absolute text-xs font-bold text-white bg-black bg-opacity-70 px-1 rounded pointer-events-none select-none"
+                    style={{
+                      left: token.x,
+                      top: token.y - token.size/2 - 16,
+                      transform: 'translateX(-50%)',
+                      fontSize: `${Math.max(8, token.size * 0.25)}px`,
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {token.label}
+                  </div>
+                  
+                  {/* Token circle */}
+                  <div
+                    className="absolute cursor-move border-2 border-white shadow-lg hover:shadow-xl transition-shadow rounded-full flex items-center justify-center text-white font-bold text-xs select-none"
+                    style={{
+                      left: token.x,
+                      top: token.y,
+                      width: token.size,
+                      height: token.size,
+                      backgroundColor: token.color,
+                      transform: 'translate(-50%, -50%)',
+                      fontSize: `${Math.max(6, token.size * 0.2)}px`
+                    }}
+                    onMouseDown={(e) => handleTokenMouseDown(e, token.id)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      removeToken(token.id);
+                    }}
+                    title={`${token.label} - Drag to move, double-click to remove`}
+                  >
+                    {token.label.charAt(0).toUpperCase()}
+                  </div>
                 </div>
               ))}
             </div>
 
             {/* Control hints */}
-            <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white text-xs p-2 rounded pointer-events-none">
+            <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white text-xs p-2 rounded">
               <div>Scroll: Zoom | Drag: Pan | Double-click token: Remove</div>
             </div>
 
