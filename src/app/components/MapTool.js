@@ -1,9 +1,8 @@
 'use client';
 
-'use client';
-
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
+import DrawingTool from './DrawingTool';
 
 const MapTool = () => {
   const [backgroundImage, setBackgroundImage] = useState(null);
@@ -18,6 +17,7 @@ const MapTool = () => {
   const [showTokenCreator, setShowTokenCreator] = useState(false);
   const [newTokenColor, setNewTokenColor] = useState('#ff0000');
   const [newTokenLabel, setNewTokenLabel] = useState('');
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
   const mapRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -76,6 +76,8 @@ const MapTool = () => {
 
   // Handle token drag start
   const handleTokenMouseDown = (e, tokenId) => {
+    if (isDrawingMode) return; // Don't allow token dragging in drawing mode
+    
     e.preventDefault();
     e.stopPropagation();
     const token = tokens.find(t => t.id === tokenId);
@@ -90,7 +92,7 @@ const MapTool = () => {
 
   // Handle pan start
   const handlePanStart = (e) => {
-    if (draggedToken) return; // Don't pan while dragging token
+    if (draggedToken || isDrawingMode) return; // Don't pan while dragging token or drawing
     
     setIsPanning(true);
     setPanStart({
@@ -101,6 +103,8 @@ const MapTool = () => {
 
   // Handle mouse move for dragging and panning
   const handleMouseMove = (e) => {
+    if (isDrawingMode) return; // Don't handle mouse move for panning/dragging in drawing mode
+
     if (draggedToken) {
       // Token dragging - free movement, no grid snapping
       const rect = mapRef.current.getBoundingClientRect();
@@ -123,12 +127,16 @@ const MapTool = () => {
 
   // Handle mouse up to stop dragging/panning
   const handleMouseUp = () => {
+    if (isDrawingMode) return; // Don't handle mouse up for panning/dragging in drawing mode
+    
     setDraggedToken(null);
     setIsPanning(false);
   };
 
   // Handle zoom
   const handleWheel = (e) => {
+    if (isDrawingMode) return; // Don't zoom in drawing mode
+    
     e.preventDefault();
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.max(0.5, Math.min(3, zoom * zoomFactor));
@@ -172,6 +180,7 @@ const MapTool = () => {
             value={gridSize}
             onChange={(e) => setGridSize(parseInt(e.target.value))}
             className="w-20"
+            disabled={isDrawingMode}
           />
           <span className="text-sm w-8">{gridSize}</span>
         </div>
@@ -187,13 +196,15 @@ const MapTool = () => {
             value={zoom}
             onChange={(e) => setZoom(parseFloat(e.target.value))}
             className="w-20"
+            disabled={isDrawingMode}
           />
           <span className="text-sm w-12">{zoom.toFixed(1)}x</span>
         </div>
 
         <button
           onClick={resetView}
-          className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+          disabled={isDrawingMode}
+          className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
           Reset View
         </button>
@@ -203,53 +214,71 @@ const MapTool = () => {
             type="checkbox"
             checked={showGrid}
             onChange={(e) => setShowGrid(e.target.checked)}
+            disabled={isDrawingMode}
           />
           <span className="text-sm">Show Grid</span>
         </label>
 
-        {/* Token creation */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowTokenCreator(!showTokenCreator)}
-            className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
-          >
-            {showTokenCreator ? 'Cancel' : 'Create Token'}
-          </button>
-          
-          {showTokenCreator && (
-            <>
-              <input
-                type="color"
-                value={newTokenColor}
-                onChange={(e) => setNewTokenColor(e.target.value)}
-                className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
-                title="Choose token color"
-              />
-              <input
-                type="text"
-                placeholder="Token label"
-                value={newTokenLabel}
-                onChange={(e) => setNewTokenLabel(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && createToken()}
-                className="px-2 py-1 border border-gray-300 rounded text-sm w-24"
-                maxLength="10"
-              />
-              <button
-                onClick={createToken}
-                className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
-              >
-                Add
-              </button>
-            </>
-          )}
-        </div>
-
+        {/* Drawing mode toggle */}
         <button
-          onClick={() => setTokens([])}
-          className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+          onClick={() => setIsDrawingMode(!isDrawingMode)}
+          disabled={!backgroundImage}
+          className={`px-3 py-1 rounded text-sm transition-colors ${
+            isDrawingMode 
+              ? 'bg-purple-600 text-white hover:bg-purple-700' 
+              : 'bg-purple-500 text-white hover:bg-purple-600'
+          } disabled:bg-gray-300 disabled:cursor-not-allowed`}
         >
-          Clear All Tokens
+          {isDrawingMode ? 'Drawing Mode ON' : 'Drawing Mode'}
         </button>
+
+        {/* Token creation */}
+        {!isDrawingMode && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowTokenCreator(!showTokenCreator)}
+              className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+            >
+              {showTokenCreator ? 'Cancel' : 'Create Token'}
+            </button>
+            
+            {showTokenCreator && (
+              <>
+                <input
+                  type="color"
+                  value={newTokenColor}
+                  onChange={(e) => setNewTokenColor(e.target.value)}
+                  className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
+                  title="Choose token color"
+                />
+                <input
+                  type="text"
+                  placeholder="Token label"
+                  value={newTokenLabel}
+                  onChange={(e) => setNewTokenLabel(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && createToken()}
+                  className="px-2 py-1 border border-gray-300 rounded text-sm w-24"
+                  maxLength="10"
+                />
+                <button
+                  onClick={createToken}
+                  className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                >
+                  Add
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {!isDrawingMode && (
+          <button
+            onClick={() => setTokens([])}
+            className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+          >
+            Clear All Tokens
+          </button>
+        )}
       </div>
 
       {/* Map area */}
@@ -275,7 +304,9 @@ const MapTool = () => {
           <div
             ref={containerRef}
             className="h-full w-full overflow-hidden relative rounded-lg border border-gray-300 bg-gray-200"
-            style={{ cursor: isPanning ? 'grabbing' : (draggedToken ? 'crosshair' : 'grab') }}
+            style={{ 
+              cursor: isDrawingMode ? 'crosshair' : (isPanning ? 'grabbing' : (draggedToken ? 'crosshair' : 'grab'))
+            }}
           >
             {/* Image container with grid overlay constrained to image bounds */}
             <div
@@ -347,7 +378,9 @@ const MapTool = () => {
                   
                   {/* Token circle */}
                   <div
-                    className="absolute cursor-move border-2 border-white shadow-lg hover:shadow-xl transition-shadow rounded-full flex items-center justify-center text-white font-bold text-xs select-none"
+                    className={`absolute border-2 border-white shadow-lg hover:shadow-xl transition-shadow rounded-full flex items-center justify-center text-white font-bold text-xs select-none ${
+                      isDrawingMode ? 'pointer-events-none' : 'cursor-move'
+                    }`}
                     style={{
                       left: token.x,
                       top: token.y,
@@ -359,10 +392,11 @@ const MapTool = () => {
                     }}
                     onMouseDown={(e) => handleTokenMouseDown(e, token.id)}
                     onDoubleClick={(e) => {
+                      if (isDrawingMode) return;
                       e.stopPropagation();
                       removeToken(token.id);
                     }}
-                    title={`${token.label} - Drag to move, double-click to remove`}
+                    title={isDrawingMode ? token.label : `${token.label} - Drag to move, double-click to remove`}
                   >
                     {token.label.charAt(0).toUpperCase()}
                   </div>
@@ -370,9 +404,26 @@ const MapTool = () => {
               ))}
             </div>
 
+            {/* Drawing Tool */}
+            <DrawingTool
+              zoom={zoom}
+              panOffset={panOffset}
+              backgroundImage={backgroundImage}
+              gridSize={gridSize}
+              showGrid={showGrid}
+              containerRef={containerRef}
+              isDrawingMode={isDrawingMode}
+              setIsDrawingMode={setIsDrawingMode}
+            />
+
             {/* Control hints */}
             <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white text-xs p-2 rounded">
-              <div>Scroll: Zoom | Drag: Pan | Double-click token: Remove</div>
+              <div>
+                {isDrawingMode 
+                  ? 'Drawing Mode: Click and drag to draw | Use controls in top-left'
+                  : 'Scroll: Zoom | Drag: Pan | Double-click token: Remove'
+                }
+              </div>
             </div>
 
             {/* Change map button */}
