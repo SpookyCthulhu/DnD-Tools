@@ -1,5 +1,7 @@
 'use client';
 
+'use client';
+
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 
@@ -156,8 +158,8 @@ const MapTool = () => {
 
   return (
     <div className="w-full h-screen bg-gray-100 flex flex-col">
-      {/* Controls */}
-      <div className="bg-white shadow-md p-4 flex flex-wrap items-center gap-4 flex-shrink-0">
+      {/* Fixed Controls - no scroll behavior */}
+      <div className="bg-white shadow-md p-4 flex flex-wrap items-center gap-4 flex-shrink-0 sticky top-0 z-10">
         <h1 className="text-xl font-bold">D&D Map Tool</h1>
         
         {/* Grid controls */}
@@ -272,21 +274,21 @@ const MapTool = () => {
         ) : (
           <div
             ref={containerRef}
-            className="h-full w-full overflow-hidden relative rounded-lg border border-gray-300"
+            className="h-full w-full overflow-hidden relative rounded-lg border border-gray-300 bg-gray-200"
             style={{ cursor: isPanning ? 'grabbing' : (draggedToken ? 'crosshair' : 'grab') }}
           >
+            {/* Image container with grid overlay constrained to image bounds */}
             <div
               ref={mapRef}
-              className="absolute inset-0 overflow-hidden"
+              className="absolute inset-0"
               style={{
-                backgroundImage: `url(${backgroundImage})`,
-                backgroundSize: 'contain',
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'center',
                 transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
                 transformOrigin: 'center center',
                 width: '100%',
-                height: '100%'
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
               onMouseDown={handlePanStart}
               onMouseMove={handleMouseMove}
@@ -294,17 +296,37 @@ const MapTool = () => {
               onMouseLeave={handleMouseUp}
               onWheel={handleWheel}
             >
-              {/* Grid overlay */}
-              {showGrid && (
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    backgroundImage: generateGridPattern(),
-                    backgroundSize: `${gridSize}px ${gridSize}px`,
-                    backgroundClip: 'content-box'
-                  }}
-                />
-              )}
+              {/* Image with grid overlay - grid only appears over the image */}
+              <div
+                className="relative max-w-full max-h-full"
+                style={{
+                  backgroundImage: `url(${backgroundImage})`,
+                  backgroundSize: 'contain',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'center',
+                  width: '100%',
+                  height: '100%'
+                }}
+              >
+                {/* Grid overlay - constrained to image dimensions */}
+                {showGrid && (
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      backgroundImage: generateGridPattern(),
+                      backgroundSize: `${gridSize}px ${gridSize}px`,
+                      maskImage: `url(${backgroundImage})`,
+                      maskSize: 'contain',
+                      maskRepeat: 'no-repeat',
+                      maskPosition: 'center',
+                      WebkitMaskImage: `url(${backgroundImage})`,
+                      WebkitMaskSize: 'contain',
+                      WebkitMaskRepeat: 'no-repeat',
+                      WebkitMaskPosition: 'center'
+                    }}
+                  />
+                )}
+              </div>
 
               {/* Tokens */}
               {tokens.map(token => (
