@@ -1,86 +1,55 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useState, useRef } from 'react';
 import DrawingTool from './DrawingTool';
+import usePanZoom from '../hooks/usePanZoom';
+import ImageUploader from './ImageUploader';
+import TokenManager from './TokenManager';
 
 const MapTool = () => {
   const [backgroundImage, setBackgroundImage] = useState(null);
-  const [tokens, setTokens] = useState([]);
   const [draggedToken, setDraggedToken] = useState(null);
   const [gridSize, setGridSize] = useState(40);
   const [showGrid, setShowGrid] = useState(true);
-  const [zoom, setZoom] = useState(1);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [showTokenCreator, setShowTokenCreator] = useState(false);
-  const [newTokenColor, setNewTokenColor] = useState('#ff0000');
-  const [newTokenLabel, setNewTokenLabel] = useState('');
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const mapRef = useRef(null);
   const containerRef = useRef(null);
 
-  // Handle image upload
-  const onDrop = useCallback((acceptedFiles) => {
-    const file = acceptedFiles[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setBackgroundImage(e.target.result);
-        // Reset pan and zoom when new image is loaded
-        setPanOffset({ x: 0, y: 0 });
-        setZoom(1);
-      };
-      reader.readAsDataURL(file);
-    }
-  }, []);
+  // Use the pan/zoom hook
+  const {
+    zoom,
+    panOffset,
+    isPanning,
+    setZoom,
+    handlePanStart,
+    handlePanMove,
+    handlePanEnd,
+    handleZoom,
+    resetView,
+    resetForNewImage
+  } = usePanZoom();
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'image/*': ['.jpeg', '.jpg', '.png', '.gif', '.bmp', '.webp']
-    },
-    multiple: false
+  // Initialize TokenManager
+  const tokenManager = TokenManager({ 
+    gridSize, 
+    isDrawingMode, 
+    zoom, 
+    panOffset,
+    onTokenMouseDown: handleTokenMouseDown
   });
 
-  // Create new token
-  const createToken = () => {
-    if (!newTokenLabel.trim()) {
-      alert('Please enter a label for the token');
-      return;
-    }
-
-    const newToken = {
-      id: Date.now(),
-      x: 200,
-      y: 200,
-      color: newTokenColor,
-      label: newTokenLabel.trim(),
-      size: gridSize * 0.9
-    };
-    setTokens([...tokens, newToken]);
-    
-    // Reset form
-    setNewTokenLabel('');
-    setShowTokenCreator(false);
+  const handleImageLoaded = (dataUrl) => {
+    setBackgroundImage(dataUrl);
+    resetForNewImage();
   };
 
-  // Update token sizes when grid size changes
-  useEffect(() => {
-    setTokens(prevTokens => prevTokens.map(token => ({
-      ...token,
-      size: gridSize * 0.9
-    })));
-  }, [gridSize]);
-
   // Handle token drag start
-  const handleTokenMouseDown = (e, tokenId) => {
+  function handleTokenMouseDown(e, tokenId) {
     if (isDrawingMode) return; // Don't allow token dragging in drawing mode
     
     e.preventDefault();
     e.stopPropagation();
-    const token = tokens.find(t => t.id === tokenId);
+    const token = tokenManager.tokens.find(t => t.id === tokenId);
     const rect = mapRef.current.getBoundingClientRect();
     
     setDraggedToken({
@@ -88,18 +57,7 @@ const MapTool = () => {
       offsetX: e.clientX - rect.left - token.x,
       offsetY: e.clientY - rect.top - token.y
     });
-  };
-
-  // Handle pan start
-  const handlePanStart = (e) => {
-    if (draggedToken || isDrawingMode) return; // Don't pan while dragging token or drawing
-    
-    setIsPanning(true);
-    setPanStart({
-      x: e.clientX - panOffset.x,
-      y: e.clientY - panOffset.y
-    });
-  };
+  }
 
   // Handle mouse move for dragging and panning
   const handleMouseMove = (e) => {
@@ -111,18 +69,16 @@ const MapTool = () => {
       const newX = e.clientX - rect.left - draggedToken.offsetX;
       const newY = e.clientY - rect.top - draggedToken.offsetY;
 
-      setTokens(tokens.map(token => 
-        token.id === draggedToken.id 
-          ? { ...token, x: newX, y: newY }
-          : token
-      ));
-    } else if (isPanning) {
-      // Map panning
-      setPanOffset({
-        x: e.clientX - panStart.x,
-        y: e.clientY - panStart.y
-      });
+      tokenManager.updateTokenPosition(draggedToken.id, newX, newY);
+    } else {
+      // Handle panning through the hook
+      handlePanMove(e);
     }
+  };
+
+  // Handle mouse down for panning
+  const handleMouseDown = (e) => {
+    handlePanStart(e, draggedToken, isDrawingMode);
   };
 
   // Handle mouse up to stop dragging/panning
@@ -130,22 +86,12 @@ const MapTool = () => {
     if (isDrawingMode) return; // Don't handle mouse up for panning/dragging in drawing mode
     
     setDraggedToken(null);
-    setIsPanning(false);
+    handlePanEnd();
   };
 
-  // Handle zoom
-  const handleWheel = (e) => {
-    if (isDrawingMode) return; // Don't zoom in drawing mode
-    
-    e.preventDefault();
-    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.5, Math.min(3, zoom * zoomFactor));
-    setZoom(newZoom);
-  };
-
-  // Remove token
-  const removeToken = (tokenId) => {
-    setTokens(tokens.filter(token => token.id !== tokenId));
+  // Handle wheel events for zooming
+  const handleWheelEvent = (e) => {
+    handleZoom(e, isDrawingMode);
   };
 
   // Generate grid pattern
@@ -158,15 +104,9 @@ const MapTool = () => {
     `;
   };
 
-  // Reset view
-  const resetView = () => {
-    setZoom(1);
-    setPanOffset({ x: 0, y: 0 });
-  };
-
   return (
     <div className="w-full h-screen bg-gray-100 flex flex-col">
-      {/* Fixed Controls - no scroll behavior */}
+      {/* Fixed Controls */}
       <div className="bg-white shadow-md p-4 flex flex-wrap items-center gap-4 flex-shrink-0 sticky top-0 z-10">
         <h1 className="text-xl font-bold">D&D Map Tool</h1>
         
@@ -232,74 +172,17 @@ const MapTool = () => {
           {isDrawingMode ? 'Drawing Mode ON' : 'Drawing Mode'}
         </button>
 
-        {/* Token creation */}
-        {!isDrawingMode && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowTokenCreator(!showTokenCreator)}
-              className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
-            >
-              {showTokenCreator ? 'Cancel' : 'Create Token'}
-            </button>
-            
-            {showTokenCreator && (
-              <>
-                <input
-                  type="color"
-                  value={newTokenColor}
-                  onChange={(e) => setNewTokenColor(e.target.value)}
-                  className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
-                  title="Choose token color"
-                />
-                <input
-                  type="text"
-                  placeholder="Token label"
-                  value={newTokenLabel}
-                  onChange={(e) => setNewTokenLabel(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && createToken()}
-                  className="px-2 py-1 border border-gray-300 rounded text-sm w-24"
-                  maxLength="10"
-                />
-                <button
-                  onClick={createToken}
-                  className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
-                >
-                  Add
-                </button>
-              </>
-            )}
-          </div>
-        )}
+        {/* Token creation controls */}
+        {tokenManager.renderTokenCreationControls()}
 
-        {!isDrawingMode && (
-          <button
-            onClick={() => setTokens([])}
-            className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
-          >
-            Clear All Tokens
-          </button>
-        )}
+        {/* Clear all tokens button */}
+        {tokenManager.renderClearAllButton()}
       </div>
 
       {/* Map area */}
       <div className="flex-1 overflow-hidden p-4">
         {!backgroundImage ? (
-          <div 
-            {...getRootProps()} 
-            className={`h-full flex items-center justify-center border-2 border-dashed cursor-pointer transition-colors rounded-lg ${
-              isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-            }`}
-          >
-            <input {...getInputProps()} />
-            <div className="text-center">
-              <p className="text-xl text-gray-600 mb-2">
-                {isDragActive ? 'Drop your map image here' : 'Drop a map image here or click to select'}
-              </p>
-              <p className="text-sm text-gray-500">
-                Supports JPG, PNG, GIF, BMP, WebP
-              </p>
-            </div>
-          </div>
+          <ImageUploader onImageLoaded={handleImageLoaded} />
         ) : (
           <div
             ref={containerRef}
@@ -308,7 +191,7 @@ const MapTool = () => {
               cursor: isDrawingMode ? 'crosshair' : (isPanning ? 'grabbing' : (draggedToken ? 'crosshair' : 'grab'))
             }}
           >
-            {/* Image container with grid overlay constrained to image bounds */}
+            {/* Image container with grid overlay */}
             <div
               ref={mapRef}
               className="absolute inset-0"
@@ -321,13 +204,13 @@ const MapTool = () => {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
-              onMouseDown={handlePanStart}
+              onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
-              onWheel={handleWheel}
+              onWheel={handleWheelEvent}
             >
-              {/* Image with grid overlay - grid only appears over the image */}
+              {/* Image with grid overlay */}
               <div
                 className="relative max-w-full max-h-full"
                 style={{
@@ -339,7 +222,7 @@ const MapTool = () => {
                   height: '100%'
                 }}
               >
-                {/* Grid overlay - constrained to image dimensions */}
+                {/* Grid overlay */}
                 {showGrid && (
                   <div
                     className="absolute inset-0 pointer-events-none"
@@ -359,49 +242,8 @@ const MapTool = () => {
                 )}
               </div>
 
-              {/* Tokens */}
-              {tokens.map(token => (
-                <div key={token.id} className="absolute">
-                  {/* Token label */}
-                  <div
-                    className="absolute text-xs font-bold text-white bg-black bg-opacity-70 px-1 rounded pointer-events-none select-none"
-                    style={{
-                      left: token.x,
-                      top: token.y - token.size/2 - 16,
-                      transform: 'translateX(-50%)',
-                      fontSize: `${Math.max(8, token.size * 0.25)}px`,
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {token.label}
-                  </div>
-                  
-                  {/* Token circle */}
-                  <div
-                    className={`absolute border-2 border-white shadow-lg hover:shadow-xl transition-shadow rounded-full flex items-center justify-center text-white font-bold text-xs select-none ${
-                      isDrawingMode ? 'pointer-events-none' : 'cursor-move'
-                    }`}
-                    style={{
-                      left: token.x,
-                      top: token.y,
-                      width: token.size,
-                      height: token.size,
-                      backgroundColor: token.color,
-                      transform: 'translate(-50%, -50%)',
-                      fontSize: `${Math.max(6, token.size * 0.2)}px`
-                    }}
-                    onMouseDown={(e) => handleTokenMouseDown(e, token.id)}
-                    onDoubleClick={(e) => {
-                      if (isDrawingMode) return;
-                      e.stopPropagation();
-                      removeToken(token.id);
-                    }}
-                    title={isDrawingMode ? token.label : `${token.label} - Drag to move, double-click to remove`}
-                  >
-                    {token.label.charAt(0).toUpperCase()}
-                  </div>
-                </div>
-              ))}
+              {/* Render tokens */}
+              {tokenManager.renderTokens()}
             </div>
 
             {/* Drawing Tool */}
