@@ -5,6 +5,7 @@ import DrawingTool from './DrawingTool';
 import usePanZoom from '../hooks/usePanZoom';
 import ImageUploader from './ImageUploader';
 import TokenManager from './TokenManager';
+import VisionBlocker from './VisionBlocker';
 
 const MapTool = () => {
   const [backgroundImage, setBackgroundImage] = useState(null);
@@ -14,6 +15,7 @@ const MapTool = () => {
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const mapRef = useRef(null);
   const containerRef = useRef(null);
+  const [isVisionBlockMode, setIsVisionBlockMode] = useState(false);
 
   // Use the pan/zoom hook
   const {
@@ -61,7 +63,7 @@ const MapTool = () => {
 
   // Handle mouse move for dragging and panning
   const handleMouseMove = (e) => {
-    if (isDrawingMode) return; // Don't handle mouse move for panning/dragging in drawing mode
+    if (isDrawingMode || isVisionBlockMode) return; // Don't handle mouse move for panning/dragging in drawing mode
 
     if (draggedToken) {
       // Token dragging - free movement, no grid snapping
@@ -78,12 +80,12 @@ const MapTool = () => {
 
   // Handle mouse down for panning
   const handleMouseDown = (e) => {
-    handlePanStart(e, draggedToken, isDrawingMode);
+    handlePanStart(e, draggedToken, isDrawingMode || isVisionBlockMode);
   };
 
   // Handle mouse up to stop dragging/panning
   const handleMouseUp = () => {
-    if (isDrawingMode) return; // Don't handle mouse up for panning/dragging in drawing mode
+    if (isDrawingMode || isVisionBlockMode) return; // Don't handle mouse up for panning/dragging in drawing mode
     
     setDraggedToken(null);
     handlePanEnd();
@@ -91,7 +93,7 @@ const MapTool = () => {
 
   // Handle wheel events for zooming
   const handleWheelEvent = (e) => {
-    handleZoom(e, isDrawingMode);
+    handleZoom(e, isDrawingMode || isVisionBlockMode);
   };
 
   // Generate grid pattern
@@ -177,6 +179,18 @@ const MapTool = () => {
 
         {/* Clear all tokens button */}
         {tokenManager.renderClearAllButton()}
+
+        <button
+          onClick={() => setIsVisionBlockMode(!isVisionBlockMode)}
+          disabled={!backgroundImage}
+          className={`px-3 py-1 rounded text-sm transition-colors ${
+            isVisionBlockMode 
+              ? 'bg-orange-600 text-white hover:bg-orange-700' 
+              : 'bg-orange-500 text-white hover:bg-orange-600'
+          } disabled:bg-gray-300 disabled:cursor-not-allowed`}
+        >
+          {isVisionBlockMode ? 'Vision Blocker ON' : 'Vision Blocker'}
+        </button>
       </div>
 
       {/* Map area */}
@@ -258,12 +272,24 @@ const MapTool = () => {
               setIsDrawingMode={setIsDrawingMode}
             />
 
+            <VisionBlocker
+              zoom={zoom}
+              panOffset={panOffset}
+              backgroundImage={backgroundImage}
+              gridSize={gridSize}
+              containerRef={containerRef}
+              isVisionBlockMode={isVisionBlockMode}
+              setIsVisionBlockMode={setIsVisionBlockMode}
+            />
+
             {/* Control hints */}
             <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white text-xs p-2 rounded">
               <div>
-                {isDrawingMode 
-                  ? 'Drawing Mode: Click and drag to draw | Use controls in top-left'
-                  : 'Scroll: Zoom | Drag: Pan | Double-click token: Remove'
+                {isVisionBlockMode 
+                  ? 'Vision Blocker: Click and drag to create blocks | Select blocks and press Delete to remove'
+                  : isDrawingMode 
+                    ? 'Drawing Mode: Click and drag to draw | Use controls in top-left'
+                    : 'Scroll: Zoom | Drag: Pan | Double-click token: Remove'
                 }
               </div>
             </div>
