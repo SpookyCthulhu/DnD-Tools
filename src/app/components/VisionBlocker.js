@@ -10,10 +10,11 @@ const VisionBlocker = ({
   gridSize, 
   containerRef,
   isVisionBlockMode,
-  setIsVisionBlockMode 
+  setIsVisionBlockMode,
+  visionBlocks,
+  setVisionBlocks
 }) => {
   const [isPlacing, setIsPlacing] = useState(false);
-  const [blocks, setBlocks] = useState([]);
   const [selectedBlocks, setSelectedBlocks] = useState(new Set());
   const [currentBlock, setCurrentBlock] = useState(null);
   const [blockOpacity, setBlockOpacity] = useState(0.8);
@@ -34,7 +35,7 @@ const VisionBlocker = ({
     const context = canvas.getContext('2d');
     contextRef.current = context;
 
-    // Redraw all blocks
+    // Redraw all visionBlocks
     redrawCanvas();
   }, [zoom, panOffset, backgroundImage]);
 
@@ -47,8 +48,8 @@ const VisionBlocker = ({
     // Clear canvas
     context.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw all blocks
-    blocks.forEach(block => {
+    // Draw all 
+    visionBlocks.forEach(block => {
       drawBlock(context, block);
     });
 
@@ -56,7 +57,7 @@ const VisionBlocker = ({
     if (currentBlock) {
       drawBlock(context, currentBlock, true);
     }
-  }, [blocks, currentBlock, zoom, panOffset]);
+  }, [visionBlocks, currentBlock, zoom, panOffset]);
 
   // Draw a single block
   const drawBlock = (context, block, isPreview = false) => {
@@ -199,7 +200,7 @@ const VisionBlocker = ({
     const height = Math.abs(currentBlock.endY - currentBlock.startY);
     
     if (width > 5 && height > 5) {
-      setBlocks(prev => [...prev, currentBlock]);
+      setVisionBlocks(prev => [...prev, currentBlock]);
     }
     
     setCurrentBlock(null);
@@ -208,8 +209,8 @@ const VisionBlocker = ({
   // Find block at point
   const findBlockAtPoint = (x, y) => {
     // Check in reverse order to get topmost block
-    for (let i = blocks.length - 1; i >= 0; i--) {
-      const block = blocks[i];
+    for (let i = visionBlocks.length - 1; i >= 0; i--) {
+      const block = visionBlocks[i];
       const minX = Math.min(block.startX, block.endX);
       const maxX = Math.max(block.startX, block.endX);
       const minY = Math.min(block.startY, block.endY);
@@ -246,13 +247,13 @@ const VisionBlocker = ({
   const deleteSelectedBlocks = useCallback(() => {
     if (selectedBlocks.size === 0) return;
     
-    setBlocks(prev => prev.filter(block => !selectedBlocks.has(block.id)));
+    setVisionBlocks(prev => prev.filter(block => !selectedBlocks.has(block.id)));
     setSelectedBlocks(new Set());
   }, [selectedBlocks]);
 
   // Clear all blocks
   const clearAllBlocks = () => {
-    setBlocks([]);
+    setVisionBlocks([]);
     setSelectedBlocks(new Set());
   };
 
@@ -270,18 +271,18 @@ const VisionBlocker = ({
         setIsPlacing(false);
       } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        setSelectedBlocks(new Set(blocks.map(block => block.id)));
+        setSelectedBlocks(new Set(visionBlocks.map(block => block.id)));
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isVisionBlockMode, deleteSelectedBlocks, blocks]);
+  }, [isVisionBlockMode, deleteSelectedBlocks, visionBlocks]);
 
   // Redraw when blocks or selection changes
   useEffect(() => {
     redrawCanvas();
-  }, [blocks, selectedBlocks, redrawCanvas]);
+  }, [visionBlocks, selectedBlocks, redrawCanvas]);
 
   return (
     <>

@@ -6,6 +6,7 @@ import usePanZoom from '../hooks/usePanZoom';
 import ImageUploader from './ImageUploader';
 import TokenManager from './TokenManager';
 import VisionBlocker from './VisionBlocker';
+import SaveLoadManager from './saveLoadManager';
 
 const MapTool = () => {
   const [backgroundImage, setBackgroundImage] = useState(null);
@@ -13,9 +14,12 @@ const MapTool = () => {
   const [gridSize, setGridSize] = useState(40);
   const [showGrid, setShowGrid] = useState(true);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [isVisionBlockMode, setIsVisionBlockMode] = useState(false);
+  const [drawings, setDrawings] = useState([]);
+  const [visionBlocks, setVisionBlocks] = useState([]);
+
   const mapRef = useRef(null);
   const containerRef = useRef(null);
-  const [isVisionBlockMode, setIsVisionBlockMode] = useState(false);
 
   // Use the pan/zoom hook
   const {
@@ -28,13 +32,14 @@ const MapTool = () => {
     handlePanEnd,
     handleZoom,
     resetView,
-    resetForNewImage
+    resetForNewImage,
+    setPanOffset
   } = usePanZoom();
 
   // Initialize TokenManager
   const tokenManager = TokenManager({ 
     gridSize, 
-    isDrawingMode, 
+    isDrawingMode: isDrawingMode || isVisionBlockMode,     
     zoom, 
     panOffset,
     onTokenMouseDown: handleTokenMouseDown
@@ -111,6 +116,22 @@ const MapTool = () => {
       {/* Fixed Controls */}
       <div className="bg-white shadow-md p-4 flex flex-wrap items-center gap-4 flex-shrink-0 sticky top-0 z-10">
         <h1 className="text-xl font-bold">D&D Map Tool</h1>
+
+        <SaveLoadManager
+          tokens={tokenManager.tokens}
+          setTokens={tokenManager.setTokens} // You'll need to expose this from TokenManager
+          drawings={drawings}
+          setDrawings={setDrawings}
+          visionBlocks={visionBlocks}
+          setVisionBlocks={setVisionBlocks}
+          backgroundImage={backgroundImage}
+          gridSize={gridSize}
+          zoom={zoom}
+          panOffset={panOffset}
+          setGridSize={setGridSize}
+          setZoom={setZoom}
+          setPanOffset={setPanOffset}
+        />
         
         {/* Grid controls */}
         <div className="flex items-center gap-2">
@@ -270,8 +291,11 @@ const MapTool = () => {
               containerRef={containerRef}
               isDrawingMode={isDrawingMode}
               setIsDrawingMode={setIsDrawingMode}
+              drawings={drawings}
+              setDrawings={setDrawings}
             />
 
+            {/* Vision Blocker */}
             <VisionBlocker
               zoom={zoom}
               panOffset={panOffset}
@@ -280,6 +304,8 @@ const MapTool = () => {
               containerRef={containerRef}
               isVisionBlockMode={isVisionBlockMode}
               setIsVisionBlockMode={setIsVisionBlockMode}
+              visionBlocks={visionBlocks}
+              setVisionBlocks={setVisionBlocks}
             />
 
             {/* Control hints */}

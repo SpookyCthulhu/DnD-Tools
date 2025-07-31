@@ -142,6 +142,7 @@ const TokenManager = ({
     
     // Methods
     updateTokenPosition,
+    setTokens,
     
     // Render methods
     renderTokenCreationControls,

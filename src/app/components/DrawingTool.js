@@ -10,13 +10,14 @@ const DrawingTool = ({
   showGrid, 
   containerRef,
   isDrawingMode,
-  setIsDrawingMode 
+  setIsDrawingMode,
+  drawings,
+  setDrawings
 }) => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushColor, setBrushColor] = useState('#ff0000');
   const [brushSize, setBrushSize] = useState(5);
   const [brushOpacity, setBrushOpacity] = useState(0.5);
-  const [paths, setPaths] = useState([]);
   const [currentPath, setCurrentPath] = useState([]);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -49,7 +50,7 @@ const DrawingTool = ({
     context.clearRect(0, 0, canvas.width, canvas.height);
 
     // Draw all paths
-    paths.forEach(path => {
+    drawings.forEach(path => {
       if (path.points.length < 2) return;
 
       context.globalAlpha = path.opacity;
@@ -71,7 +72,7 @@ const DrawingTool = ({
     });
 
     context.globalAlpha = 1;
-  }, [paths, zoom, panOffset]);
+  }, [drawings, zoom, panOffset]);
 
   // Transform point based on current zoom and pan
   const transformPoint = (x, y) => {
@@ -152,7 +153,7 @@ const DrawingTool = ({
         size: brushSize,
         opacity: brushOpacity
       };
-      setPaths(prev => [...prev, newPath]);
+      setDrawings(prev => [...prev, newPath]);
     }
     
     setCurrentPath([]);
@@ -160,7 +161,7 @@ const DrawingTool = ({
 
   // Clear all drawings
   const clearDrawings = () => {
-    setPaths([]);
+    setDrawings([]);
     const context = contextRef.current;
     const canvas = canvasRef.current;
     if (context && canvas) {
@@ -170,13 +171,13 @@ const DrawingTool = ({
 
   // Undo last drawing
   const undoLast = () => {
-    setPaths(prev => prev.slice(0, -1));
+    setDrawings(prev => prev.slice(0, -1));
   };
 
   // Redraw when paths change
   useEffect(() => {
     redrawCanvas();
-  }, [paths, redrawCanvas]);
+  }, [drawings, redrawCanvas]);
 
   return (
     <>
@@ -247,7 +248,7 @@ const DrawingTool = ({
             <div className="flex gap-2">
               <button
                 onClick={undoLast}
-                disabled={paths.length === 0}
+                disabled={drawings.length === 0}
                 className="px-2 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 Undo
