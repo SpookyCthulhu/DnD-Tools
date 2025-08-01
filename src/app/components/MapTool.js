@@ -77,6 +77,7 @@ const MapTool = () => {
       visionBlocks: [...visionBlocks]
     };
     
+    // Create new history array up to current index
     const newHistory = history.slice(0, historyIndex + 1);
     newHistory.push(currentState);
     
@@ -115,6 +116,25 @@ const MapTool = () => {
     }
   }, [history, historyIndex]);
 
+  // Helper to add to history after state changes
+  const addToHistory = useCallback((newTokens, newDrawings, newVisionBlocks) => {
+    const currentState = {
+      tokens: newTokens,
+      drawings: newDrawings,
+      visionBlocks: newVisionBlocks
+    };
+    
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(currentState);
+    
+    if (newHistory.length > 50) {
+      newHistory.shift();
+    }
+    
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  }, [history, historyIndex]);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -130,40 +150,37 @@ const MapTool = () => {
       // Delete selected items
       if (activeMode === 'vision' && (e.key === 'Delete' || e.key === 'Backspace')) {
         e.preventDefault();
-        setVisionBlocks(prev => {
-          const newBlocks = prev.filter(block => !selectedVisionBlocks.has(block.id));
-          if (newBlocks.length !== prev.length) {
-            saveToHistory();
-          }
-          return newBlocks;
-        });
+        const newBlocks = visionBlocks.filter(block => !selectedVisionBlocks.has(block.id));
+        if (newBlocks.length !== visionBlocks.length) {
+          setVisionBlocks(newBlocks);
+          addToHistory(tokens, drawings, newBlocks);
+        }
         setSelectedVisionBlocks(new Set());
       } else if (selectedTokenId && (e.key === 'Delete' || e.key === 'Backspace')) {
         e.preventDefault();
-        setTokens(prev => {
-          const newTokens = prev.filter(token => token.id !== selectedTokenId);
-          if (newTokens.length !== prev.length) {
-            saveToHistory();
-          }
-          return newTokens;
-        });
+        const newTokens = tokens.filter(token => token.id !== selectedTokenId);
+        if (newTokens.length !== tokens.length) {
+          setTokens(newTokens);
+          addToHistory(newTokens, drawings, visionBlocks);
+        }
         setSelectedTokenId(null);
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [activeMode, selectedVisionBlocks, selectedTokenId, undo, redo, saveToHistory]);
+  }, [activeMode, selectedVisionBlocks, selectedTokenId, undo, redo, tokens, drawings, visionBlocks, addToHistory]);
 
   const handleImageLoaded = (dataUrl) => {
     setBackgroundImage(dataUrl);
     resetForNewImage();
     // Initialize history with empty state
-    setHistory([{
+    const initialState = {
       tokens: [],
       drawings: [],
       visionBlocks: []
-    }]);
+    };
+    setHistory([initialState]);
     setHistoryIndex(0);
   };
 
@@ -186,22 +203,22 @@ const MapTool = () => {
   }, [snapToGrid, gridSize, activeMode, freehandMode]);
 
   // Handle canvas click (for token placement)
-  const handleCanvasClick = useCallback((e, coords) => {
-    if (activeMode === 'tokens' && newTokenLabel.trim()) {
-      saveToHistory();
-      const newToken = {
-        id: Date.now(),
-        x: coords.x,
-        y: coords.y,
-        color: newTokenColor,
-        label: newTokenLabel.trim(),
-        size: gridSize * sizeMultipliers[newTokenSize],
-        sizeType: newTokenSize
-      };
-      
-      setTokens(prev => [...prev, newToken]);
-    }
-  }, [activeMode, newTokenLabel, newTokenColor, newTokenSize, gridSize, saveToHistory]);
+const handleCanvasClick = useCallback((e, coords) => {
+  if (activeMode === 'tokens' && newTokenLabel.trim()) {
+    const newToken = {
+      id: Date.now(),
+      x: coords.x,
+      y: coords.y,
+      color: newTokenColor,
+      label: newTokenLabel.trim(),
+      sizeType: newTokenSize,
+    };
+    
+    const newTokens = [...tokens, newToken];
+    setTokens(newTokens);
+    addToHistory(newTokens, drawings, visionBlocks);
+  }
+}, [activeMode, newTokenLabel, newTokenColor, newTokenSize, tokens, drawings, visionBlocks, addToHistory]);
 
   // Handle canvas mouse down
   const handleCanvasMouseDown = useCallback((e, coords) => {
@@ -271,12 +288,13 @@ const MapTool = () => {
         }
       }
     } else if (!activeMode) {
-      // Check if clicking on a token
-      const clickedToken = tokens.find(token => {
-        const dx = coords.x - token.x;
-        const dy = coords.y - token.y;
-        return Math.sqrt(dx * dx + dy * dy) <= token.size / 2;
-      });
+    // Check if clicking on a token
+    const clickedToken = tokens.find(token => {
+      const tokenSize = gridSize * sizeMultipliers[token.sizeType || 'normal'];
+      const dx = coords.x - token.x;
+      const dy = coords.y - token.y;
+      return Math.sqrt(dx * dx + dy * dy) <= tokenSize / 2;
+    });
 
       if (clickedToken) {
         setSelectedTokenId(clickedToken.id);
@@ -347,20 +365,24 @@ const MapTool = () => {
     if (activeMode === 'drawing' && currentDrawing) {
       // Finish drawing
       if (currentDrawing.points.length > 1) {
-        saveToHistory();
-        setDrawings(prev => [...prev, { ...currentDrawing, id: Date.now() }]);
+        const newDrawing = { ...currentDrawing, id: Date.now() };
+        const newDrawings = [...drawings, newDrawing];
+        setDrawings(newDrawings);
+        addToHistory(tokens, newDrawings, visionBlocks);
       }
       setCurrentDrawing(null);
     } else if (activeMode === 'vision') {
       if (freehandMode && freehandVisionBlock) {
         // Finish freehand vision block
         if (freehandVisionBlock.points.length > 2) {
-          saveToHistory();
-          setVisionBlocks(prev => [...prev, {
+          const newBlock = {
             ...freehandVisionBlock,
             id: Date.now(),
             type: 'freehand'
-          }]);
+          };
+          const newVisionBlocks = [...visionBlocks, newBlock];
+          setVisionBlocks(newVisionBlocks);
+          addToHistory(tokens, drawings, newVisionBlocks);
         }
         setFreehandVisionBlock(null);
       } else if (currentVisionBlock && isPlacingVisionBlock) {
@@ -370,20 +392,23 @@ const MapTool = () => {
         
         // Only create block if dragged (not just clicked)
         if (width > 5 && height > 5) {
-          saveToHistory();
-          setVisionBlocks(prev => [...prev, { ...currentVisionBlock, id: Date.now() }]);
+          const newBlock = { ...currentVisionBlock, id: Date.now() };
+          const newVisionBlocks = [...visionBlocks, newBlock];
+          setVisionBlocks(newVisionBlocks);
+          addToHistory(tokens, drawings, newVisionBlocks);
         }
         setCurrentVisionBlock(null);
       }
       setIsPlacingVisionBlock(false);
     } else if (!activeMode) {
       if (draggedToken) {
-        saveToHistory();
+        // Save token drag to history
+        addToHistory(tokens, drawings, visionBlocks);
       }
       setDraggedToken(null);
       handlePanEnd();
     }
-  }, [activeMode, currentDrawing, currentVisionBlock, handlePanEnd, saveToHistory, freehandMode, freehandVisionBlock, isPlacingVisionBlock]);
+  }, [activeMode, currentDrawing, currentVisionBlock, handlePanEnd, tokens, drawings, visionBlocks, addToHistory, freehandMode, freehandVisionBlock, isPlacingVisionBlock]);
 
   // Handle wheel events
   const handleWheelEvent = (e) => {
@@ -393,31 +418,30 @@ const MapTool = () => {
   // Clear entire canvas
   const clearCanvas = () => {
     if (window.confirm('Are you sure you want to clear the entire canvas? This will remove all tokens, drawings, and vision blocks.')) {
-      saveToHistory();
       setTokens([]);
       setDrawings([]);
       setVisionBlocks([]);
-      setSelectedTokenId(null);
-      setSelectedVisionBlocks(new Set());
+      addToHistory([], [], []);
     }
   };
 
   // Clear functions
   const clearAllDrawings = () => {
-    saveToHistory();
     setDrawings([]);
+    addToHistory(tokens, [], visionBlocks);
   };
 
   const clearAllVisionBlocks = () => {
-    saveToHistory();
     setVisionBlocks([]);
     setSelectedVisionBlocks(new Set());
+    addToHistory(tokens, drawings, []);
   };
 
   // Undo last drawing
   const undoLastDrawing = () => {
-    saveToHistory();
-    setDrawings(prev => prev.slice(0, -1));
+    const newDrawings = drawings.slice(0, -1);
+    setDrawings(newDrawings);
+    addToHistory(tokens, newDrawings, visionBlocks);
   };
 
   return (
@@ -429,323 +453,323 @@ const MapTool = () => {
         {/* Grid controls */}
         <div className="flex items-center gap-2">
           <label className="text-sm">Grid Size:</label>
-         <input
-           type="range"
-           min="10"
-           max="80"
-           value={gridSize}
-           onChange={(e) => setGridSize(parseInt(e.target.value))}
-           className="w-20"
-           disabled={activeMode !== null}
-         />
-         <span className="text-sm w-8">{gridSize}</span>
-       </div>
+          <input
+            type="range"
+            min="10"
+            max="80"
+            value={gridSize}
+            onChange={(e) => setGridSize(parseInt(e.target.value))}
+            className="w-20"
+            disabled={activeMode !== null}
+          />
+          <span className="text-sm w-8">{gridSize}</span>
+        </div>
 
-       {/* Zoom controls */}
-       <div className="flex items-center gap-2">
-         <label className="text-sm">Zoom:</label>
-         <input
-           type="range"
-           min="0.5"
-           max="6"
-           step="0.1"
-           value={zoom}
-           onChange={(e) => setZoom(parseFloat(e.target.value))}
-           className="w-20"
-           disabled={activeMode !== null}
-         />
-         <span className="text-sm w-12">{zoom.toFixed(1)}x</span>
-       </div>
+        {/* Zoom controls */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Zoom:</label>
+          <input
+            type="range"
+            min="0.5"
+            max="6"
+            step="0.1"
+            value={zoom}
+            onChange={(e) => setZoom(parseFloat(e.target.value))}
+            className="w-20"
+            disabled={activeMode !== null}
+          />
+          <span className="text-sm w-12">{zoom.toFixed(1)}x</span>
+        </div>
 
-       <button
-         onClick={resetView}
-         disabled={activeMode !== null}
-         className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-       >
-         Reset View
-       </button>
+        <button
+          onClick={resetView}
+          disabled={activeMode !== null}
+          className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          Reset View
+        </button>
 
-       <label className="flex items-center gap-2">
-         <input
-           type="checkbox"
-           checked={showGrid}
-           onChange={(e) => setShowGrid(e.target.checked)}
-           disabled={activeMode !== null}
-         />
-         <span className="text-sm">Show Grid</span>
-       </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={showGrid}
+            onChange={(e) => setShowGrid(e.target.checked)}
+            disabled={activeMode !== null}
+          />
+          <span className="text-sm">Show Grid</span>
+        </label>
 
-       {/* Mode buttons - only show when no mode is active */}
-       {!activeMode && (
-         <>
-           <button
-             onClick={() => setMode('drawing')}
-             disabled={!backgroundImage}
-             className="px-3 py-1 bg-purple-500 text-white rounded text-sm hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-           >
-             Drawing Mode
-           </button>
+        {/* Mode buttons - only show when no mode is active */}
+        {!activeMode && (
+          <>
+            <button
+              onClick={() => setMode('drawing')}
+              disabled={!backgroundImage}
+              className="px-3 py-1 bg-purple-500 text-white rounded text-sm hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              Drawing Mode
+            </button>
 
-           <button
-             onClick={() => setMode('tokens')}
-             disabled={!backgroundImage}
-             className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-           >
-             Token Mode
-           </button>
+            <button
+              onClick={() => setMode('tokens')}
+              disabled={!backgroundImage}
+              className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              Token Mode
+            </button>
 
-           <button
-             onClick={() => setMode('vision')}
-             disabled={!backgroundImage}
-             className="px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-           >
-             Vision Blocker
-           </button>
+            <button
+              onClick={() => setMode('vision')}
+              disabled={!backgroundImage}
+              className="px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              Vision Blocker
+            </button>
 
-           <button
-             onClick={clearCanvas}
-             disabled={!backgroundImage || (tokens.length === 0 && drawings.length === 0 && visionBlocks.length === 0)}
-             className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-           >
-             Clear Canvas
-           </button>
-         </>
-       )}
+            <button
+              onClick={clearCanvas}
+              disabled={!backgroundImage || (tokens.length === 0 && drawings.length === 0 && visionBlocks.length === 0)}
+              className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              Clear Canvas
+            </button>
+          </>
+        )}
 
-       {/* Spacer to push remaining items to the right */}
-       <div className="flex-1"></div>
+        {/* Spacer to push remaining items to the right */}
+        <div className="flex-1"></div>
 
-       {/* Undo/Redo buttons */}
-       <button
-         onClick={undo}
-         disabled={historyIndex <= 0}
-         className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-         title="Undo (Ctrl+Z)"
-       >
-         ↶ Undo
-       </button>
-       
-       <button
-         onClick={redo}
-         disabled={historyIndex >= history.length - 1}
-         className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-         title="Redo (Ctrl+Y)"
-       >
-         ↷ Redo
-       </button>
+        {/* Undo/Redo buttons */}
+        <button
+          onClick={undo}
+          disabled={historyIndex <= 0}
+          className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          title="Undo (Ctrl+Z)"
+        >
+          ↶ Undo
+        </button>
+        
+        <button
+          onClick={redo}
+          disabled={historyIndex >= history.length - 1}
+          className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          title="Redo (Ctrl+Y)"
+        >
+          ↷ Redo
+        </button>
 
-       {/* Save/Load on far right */}
-       <SaveLoadManager
-         tokens={tokens}
-         setTokens={setTokens}
-         drawings={drawings}
-         setDrawings={setDrawings}
-         visionBlocks={visionBlocks}
-         setVisionBlocks={setVisionBlocks}
-         backgroundImage={backgroundImage}
-         gridSize={gridSize}
-         zoom={zoom}
-         panOffset={panOffset}
-         setGridSize={setGridSize}
-         setZoom={setZoom}
-         setPanOffset={setPanOffset}
-       />
-     </div>
+        {/* Save/Load on far right */}
+        <SaveLoadManager
+          tokens={tokens}
+          setTokens={setTokens}
+          drawings={drawings}
+          setDrawings={setDrawings}
+          visionBlocks={visionBlocks}
+          setVisionBlocks={setVisionBlocks}
+          backgroundImage={backgroundImage}
+          gridSize={gridSize}
+          zoom={zoom}
+          panOffset={panOffset}
+          setGridSize={setGridSize}
+          setZoom={setZoom}
+          setPanOffset={setPanOffset}
+        />
+      </div>
 
-     {/* Map area */}
-     <div className="flex-1 overflow-hidden p-4">
-       {!backgroundImage ? (
-         <ImageUploader onImageLoaded={handleImageLoaded} />
-       ) : (
-         <div
-           ref={containerRef}
-           className="h-full w-full overflow-hidden relative rounded-lg border border-gray-300 bg-gray-200"
-           onWheel={handleWheelEvent}
-         >
-           <UnifiedCanvas
-             backgroundImage={backgroundImage}
-             gridSize={gridSize}
-             showGrid={showGrid}
-             zoom={zoom}
-             panOffset={panOffset}
-             tokens={tokens}
-             drawings={drawings}
-             visionBlocks={visionBlocks}
-             activeMode={activeMode}
-             onCanvasClick={handleCanvasClick}
-             onCanvasMouseDown={handleCanvasMouseDown}
-             onCanvasMouseMove={handleCanvasMouseMove}
-             onCanvasMouseUp={handleCanvasMouseUp}
-             selectedTokenId={selectedTokenId}
-             currentDrawing={currentDrawing}
-             currentVisionBlock={currentVisionBlock}
-             selectedVisionBlocks={selectedVisionBlocks}
-             freehandVisionBlock={freehandVisionBlock}
-           />
+      {/* Map area */}
+      <div className="flex-1 overflow-hidden p-4">
+        {!backgroundImage ? (
+          <ImageUploader onImageLoaded={handleImageLoaded} />
+        ) : (
+          <div
+            ref={containerRef}
+            className="h-full w-full overflow-hidden relative rounded-lg border border-gray-300 bg-gray-200"
+            onWheel={handleWheelEvent}
+          >
+            <UnifiedCanvas
+              backgroundImage={backgroundImage}
+              gridSize={gridSize}
+              showGrid={showGrid}
+              zoom={zoom}
+              panOffset={panOffset}
+              tokens={tokens}
+              drawings={drawings}
+              visionBlocks={visionBlocks}
+              activeMode={activeMode}
+              onCanvasClick={handleCanvasClick}
+              onCanvasMouseDown={handleCanvasMouseDown}
+              onCanvasMouseMove={handleCanvasMouseMove}
+              onCanvasMouseUp={handleCanvasMouseUp}
+              selectedTokenId={selectedTokenId}
+              currentDrawing={currentDrawing}
+              currentVisionBlock={currentVisionBlock}
+              selectedVisionBlocks={selectedVisionBlocks}
+              freehandVisionBlock={freehandVisionBlock}
+            />
 
-           {/* Mode UI Windows */}
-           {/* Drawing Mode UI */}
-           {activeMode === 'drawing' && (
-             <div className="absolute top-4 right-4 bg-white bg-opacity-90 p-3 rounded-lg shadow-lg z-20">
-               <div className="flex flex-col gap-3 min-w-48">
-                 <h3 className="font-semibold text-sm">Drawing Tools</h3>
-                 
-                 <div className="flex items-center gap-2">
-                   <label className="text-xs font-medium">Color:</label>
-                   <input
-                     type="color"
-                     value={brushColor}
-                     onChange={(e) => setBrushColor(e.target.value)}
-                     className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
-                   />
-                 </div>
+            {/* Mode UI Windows */}
+            {/* Drawing Mode UI */}
+            {activeMode === 'drawing' && (
+              <div className="absolute top-4 right-4 bg-white bg-opacity-90 p-3 rounded-lg shadow-lg z-20">
+                <div className="flex flex-col gap-3 min-w-48">
+                  <h3 className="font-semibold text-sm">Drawing Tools</h3>
+                  
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium">Color:</label>
+                    <input
+                      type="color"
+                      value={brushColor}
+                      onChange={(e) => setBrushColor(e.target.value)}
+                      className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
+                    />
+                  </div>
 
-                 <div className="flex items-center gap-2">
-                   <label className="text-xs font-medium">Size:</label>
-                   <input
-                     type="range"
-                     min="1"
-                     max="20"
-                     value={brushSize}
-                     onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                     className="flex-1"
-                   />
-                   <span className="text-xs w-6">{brushSize}</span>
-                 </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium">Size:</label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="20"
+                      value={brushSize}
+                      onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                      className="flex-1"
+                    />
+                    <span className="text-xs w-6">{brushSize}</span>
+                  </div>
 
-                 <div className="flex items-center gap-2">
-                   <label className="text-xs font-medium">Opacity:</label>
-                   <input
-                     type="range"
-                     min="0.1"
-                     max="1"
-                     step="0.1"
-                     value={brushOpacity}
-                     onChange={(e) => setBrushOpacity(parseFloat(e.target.value))}
-                     className="flex-1"
-                   />
-                   <span className="text-xs w-8">{Math.round(brushOpacity * 100)}%</span>
-                 </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium">Opacity:</label>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1"
+                      step="0.1"
+                      value={brushOpacity}
+                      onChange={(e) => setBrushOpacity(parseFloat(e.target.value))}
+                      className="flex-1"
+                    />
+                    <span className="text-xs w-8">{Math.round(brushOpacity * 100)}%</span>
+                  </div>
 
-                 <div className="flex gap-2">
-                   <button
-                     onClick={undoLastDrawing}
-                     disabled={drawings.length === 0}
-                     className="px-2 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                   >
-                     Undo Last
-                   </button>
-                   <button
-                     onClick={clearAllDrawings}
-                     className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-                   >
-                     Clear All
-                   </button>
-                 </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={undoLastDrawing}
+                      disabled={drawings.length === 0}
+                      className="px-2 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    >
+                      Undo Last
+                    </button>
+                    <button
+                      onClick={clearAllDrawings}
+                      className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+                    >
+                      Clear All
+                    </button>
+                  </div>
 
-                 <button
-                   onClick={() => setMode(null)}
-                   className="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
-                 >
-                   Exit Drawing
-                 </button>
-               </div>
-             </div>
-           )}
+                  <button
+                    onClick={() => setMode(null)}
+                    className="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+                  >
+                    Exit Drawing
+                  </button>
+                </div>
+              </div>
+            )}
 
-           {/* Token Mode UI */}
-           {activeMode === 'tokens' && (
-             <div className="absolute top-4 right-4 bg-white bg-opacity-90 p-3 rounded-lg shadow-lg z-20">
-               <div className="flex flex-col gap-3 min-w-48">
-                 <h3 className="font-semibold text-sm">Token Manager</h3>
-                 
-                 <div className="flex flex-col gap-1">
-                   <label className="text-xs font-medium">Token Label:</label>
-                   <input
-                     type="text"
-                     placeholder="Enter token name"
-                     value={newTokenLabel}
-                     onChange={(e) => setNewTokenLabel(e.target.value)}
-                     className="px-2 py-1 border border-gray-300 rounded text-sm"
-                     maxLength="20"
-                     autoFocus
-                   />
-                   {!newTokenLabel.trim() && (
-                     <span className="text-xs text-red-500">Enter a label to place tokens</span>
-                   )}
-                 </div>
+            {/* Token Mode UI */}
+            {activeMode === 'tokens' && (
+              <div className="absolute top-4 right-4 bg-white bg-opacity-90 p-3 rounded-lg shadow-lg z-20">
+                <div className="flex flex-col gap-3 min-w-48">
+                  <h3 className="font-semibold text-sm">Token Manager</h3>
+                  
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium">Token Label:</label>
+                    <input
+                      type="text"
+                      placeholder="Enter token name"
+                      value={newTokenLabel}
+                      onChange={(e) => setNewTokenLabel(e.target.value)}
+                      className="px-2 py-1 border border-gray-300 rounded text-sm"
+                      maxLength="20"
+                      autoFocus
+                    />
+                    {!newTokenLabel.trim() && (
+                      <span className="text-xs text-red-500">Enter a label to place tokens</span>
+                    )}
+                  </div>
 
-                 <div className="flex items-center gap-2">
-                   <label className="text-xs font-medium">Color:</label>
-                   <input
-                     type="color"
-                     value={newTokenColor}
-                     onChange={(e) => setNewTokenColor(e.target.value)}
-                     className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
-                   />
-                   <span className="text-xs text-gray-600 flex-1">
-                     Click map to place token
-                   </span>
-                 </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium">Color:</label>
+                    <input
+                      type="color"
+                      value={newTokenColor}
+                      onChange={(e) => setNewTokenColor(e.target.value)}
+                      className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-600 flex-1">
+                      Click map to place token
+                    </span>
+                  </div>
 
-                 <div className="flex items-center gap-2">
-                   <label className="text-xs font-medium">Size:</label>
-                   <select
-                     value={newTokenSize}
-                     onChange={(e) => setNewTokenSize(e.target.value)}
-                     className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                   >
-                     <option value="normal">Normal</option>
-                     <option value="large">Large</option>
-                   </select>
-                 </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium">Size:</label>
+                    <select
+                      value={newTokenSize}
+                      onChange={(e) => setNewTokenSize(e.target.value)}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="large">Large</option>
+                    </select>
+                  </div>
 
-                 <div className="text-xs text-gray-600">
-                   {tokens.length} token{tokens.length !== 1 ? 's' : ''} on map
-                 </div>
+                  <div className="text-xs text-gray-600">
+                    {tokens.length} token{tokens.length !== 1 ? 's' : ''} on map
+                  </div>
 
-                 <div className="text-xs text-gray-600 border-t pt-2">
-                   <div>• Click anywhere to place</div>
-                   <div>• Drag tokens to move</div>
-                   <div>• Select and press Delete</div>
-                 </div>
+                  <div className="text-xs text-gray-600 border-t pt-2">
+                    <div>• Click anywhere to place</div>
+                    <div>• Drag tokens to move</div>
+                    <div>• Select and press Delete</div>
+                  </div>
 
-                 <button
-                   onClick={() => setMode(null)}
-                   className="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
-                 >
-                   Exit Token Mode
-                 </button>
-               </div>
-             </div>
-           )}
+                  <button
+                    onClick={() => setMode(null)}
+                    className="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+                  >
+                    Exit Token Mode
+                  </button>
+                </div>
+              </div>
+            )}
 
-           {/* Vision Blocker Mode UI */}
-           {activeMode === 'vision' && (
-             <div className="absolute top-4 right-4 bg-white bg-opacity-90 p-3 rounded-lg shadow-lg z-20">
-               <div className="flex flex-col gap-3 min-w-48">
-                 <h3 className="font-semibold text-sm">Vision Blocker</h3>
-                 
-                 <label className="flex items-center gap-2">
-                   <input
-                     type="checkbox"
-                     checked={freehandMode}
-                     onChange={(e) => setFreehandMode(e.target.checked)}
-                   />
-                   <span className="text-xs font-medium">Freehand Mode</span>
-                 </label>
+            {/* Vision Blocker Mode UI */}
+            {activeMode === 'vision' && (
+              <div className="absolute top-4 right-4 bg-white bg-opacity-90 p-3 rounded-lg shadow-lg z-20">
+                <div className="flex flex-col gap-3 min-w-48">
+                  <h3 className="font-semibold text-sm">Vision Blocker</h3>
+                  
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={freehandMode}
+                      onChange={(e) => setFreehandMode(e.target.checked)}
+                    />
+                    <span className="text-xs font-medium">Freehand Mode</span>
+                  </label>
 
-                 <div className="flex items-center gap-2">
-                   <label className="text-xs font-medium">Color:</label>
-                   <input
-                     type="color"
-                     value={blockColor}
-                     onChange={(e) => setBlockColor(e.target.value)}
-                     className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
-                   />
-                 </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium">Color:</label>
+                    <input
+                      type="color"
+                      value={blockColor}
+                      onChange={(e) => setBlockColor(e.target.value)}
+                      className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
+                    />
+                  </div>
 
-                 <div className="flex items-center gap-2">
+                  <div className="flex items-centergap-2">
                    <label className="text-xs font-medium">Opacity:</label>
                    <input
                      type="range"
@@ -779,8 +803,9 @@ const MapTool = () => {
                  <div className="flex gap-2">
                    <button
                      onClick={() => {
-                       saveToHistory();
-                       setVisionBlocks(prev => prev.filter(block => !selectedVisionBlocks.has(block.id)));
+                       const newBlocks = visionBlocks.filter(block => !selectedVisionBlocks.has(block.id));
+                       setVisionBlocks(newBlocks);
+                       addToHistory(tokens, drawings, newBlocks);
                        setSelectedVisionBlocks(new Set());
                      }}
                      disabled={selectedVisionBlocks.size === 0}

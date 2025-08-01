@@ -272,51 +272,58 @@ const UnifiedCanvas = ({
 
     // Draw tokens
     tokens.forEach(token => {
-      ctx.save();
+    ctx.save();
 
-      // Token shadow
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-      ctx.shadowBlur = 5;
-      ctx.shadowOffsetX = 2;
-      ctx.shadowOffsetY = 2;
+    // Calculate actual size based on current grid size
+    const sizeMultipliers = {
+        normal: 0.9,
+        large: 1.5
+    };
+    const tokenSize = gridSize * sizeMultipliers[token.sizeType || 'normal'];
 
-      // Token circle
-      ctx.fillStyle = token.color;
-      ctx.beginPath();
-      ctx.arc(token.x, token.y, token.size / 2, 0, Math.PI * 2);
-      ctx.fill();
+    // Token shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
 
-      // Token border
-      ctx.shadowColor = 'transparent';
-      ctx.strokeStyle = selectedTokenId === token.id ? '#ffff00' : '#ffffff';
-      ctx.lineWidth = selectedTokenId === token.id ? 3 : 2;
-      ctx.stroke();
+    // Token circle
+    ctx.fillStyle = token.color;
+    ctx.beginPath();
+    ctx.arc(token.x, token.y, tokenSize / 2, 0, Math.PI * 2);
+    ctx.fill();
 
-      // Token label - scale with grid size
-      const labelScale = gridSize / 40; // 40 is our base grid size
-      const labelSize = Math.max(12, Math.min(24, 14 * labelScale));
-      ctx.font = `bold ${labelSize}px Arial`;
-      const labelWidth = ctx.measureText(token.label).width;
-      
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.fillRect(
+    // Token border
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = selectedTokenId === token.id ? '#ffff00' : '#ffffff';
+    ctx.lineWidth = selectedTokenId === token.id ? 3 : 2;
+    ctx.stroke();
+
+    // Token label - scale with grid size
+    const labelScale = gridSize / 40; // 40 is our base grid size
+    const labelSize = Math.max(12, Math.min(24, 14 * labelScale));
+    ctx.font = `bold ${labelSize}px Arial`;
+    const labelWidth = ctx.measureText(token.label).width;
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(
         token.x - labelWidth / 2 - 4,
-        token.y - token.size / 2 - labelSize - 8,
+        token.y - tokenSize / 2 - labelSize - 8,
         labelWidth + 8,
         labelSize + 4
-      );
+    );
 
-      // Token label text
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(
+    // Token label text
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(
         token.label,
         token.x,
-        token.y - token.size / 2 - labelSize / 2 - 6
-      );
+        token.y - tokenSize / 2 - labelSize / 2 - 6
+    );
 
-      ctx.restore();
+    ctx.restore();
     });
 
     // Restore context state
