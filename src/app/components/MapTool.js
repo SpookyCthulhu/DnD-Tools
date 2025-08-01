@@ -42,7 +42,8 @@ const MapTool = () => {
     isDrawingMode: isDrawingMode || isVisionBlockMode,     
     zoom, 
     panOffset,
-    onTokenMouseDown: handleTokenMouseDown
+    onTokenMouseDown: handleTokenMouseDown,
+    containerRef // Pass containerRef to TokenManager
   });
 
   const handleImageLoaded = (dataUrl) => {
@@ -119,7 +120,7 @@ const MapTool = () => {
 
         <SaveLoadManager
           tokens={tokenManager.tokens}
-          setTokens={tokenManager.setTokens} // You'll need to expose this from TokenManager
+          setTokens={tokenManager.setTokens}
           drawings={drawings}
           setDrawings={setDrawings}
           visionBlocks={visionBlocks}
@@ -138,7 +139,7 @@ const MapTool = () => {
           <label className="text-sm">Grid Size:</label>
           <input
             type="range"
-            min="20"
+            min="10"
             max="80"
             value={gridSize}
             onChange={(e) => setGridSize(parseInt(e.target.value))}
@@ -154,7 +155,7 @@ const MapTool = () => {
           <input
             type="range"
             min="0.5"
-            max="3"
+            max="6"
             step="0.1"
             value={zoom}
             onChange={(e) => setZoom(parseFloat(e.target.value))}

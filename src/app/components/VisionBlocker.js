@@ -1,4 +1,3 @@
-// src/app/components/VisionBlocker.js
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -48,7 +47,17 @@ const VisionBlocker = ({
     // Clear canvas
     context.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw all 
+    // Apply the same transform as the map
+    context.save();
+    
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    context.translate(centerX, centerY);
+    context.scale(zoom, zoom);
+    context.translate(-centerX + panOffset.x / zoom, -centerY + panOffset.y / zoom);
+
+    // Draw all blocks
     visionBlocks.forEach(block => {
       drawBlock(context, block);
     });
@@ -57,20 +66,19 @@ const VisionBlocker = ({
     if (currentBlock) {
       drawBlock(context, currentBlock, true);
     }
+
+    context.restore();
   }, [visionBlocks, currentBlock, zoom, panOffset]);
 
   // Draw a single block
   const drawBlock = (context, block, isPreview = false) => {
-    const startTransformed = transformPoint(block.startX, block.startY);
-    const endTransformed = transformPoint(block.endX, block.endY);
-
-    const x = Math.min(startTransformed.x, endTransformed.x);
-    const y = Math.min(startTransformed.y, endTransformed.y);
-    const width = Math.abs(endTransformed.x - startTransformed.x);
-    const height = Math.abs(endTransformed.y - startTransformed.y);
+    const x = Math.min(block.startX, block.endX);
+    const y = Math.min(block.startY, block.endY);
+    const width = Math.abs(block.endX - block.startX);
+    const height = Math.abs(block.endY - block.startY);
 
     // Fill
-    context.globalAlpha = isPreview ? blockOpacity * 0.5 : blockOpacity;
+    context.globalAlpha = isPreview ? blockOpacity * 0.5 : block.opacity;
     context.fillStyle = block.color;
     context.fillRect(x, y, width, height);
 
@@ -107,20 +115,19 @@ const VisionBlocker = ({
     });
   };
 
-  // Transform point based on current zoom and pan
-  const transformPoint = (x, y) => {
-    return {
-      x: (x * zoom) + panOffset.x,
-      y: (y * zoom) + panOffset.y
-    };
-  };
+  // Transform point from screen to map coordinates
+  const screenToMapCoordinates = (screenX, screenY) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
 
-  // Inverse transform point (from screen coordinates to map coordinates)
-  const inverseTransformPoint = (x, y) => {
-    return {
-      x: (x - panOffset.x) / zoom,
-      y: (y - panOffset.y) / zoom
-    };
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    // Reverse the transformation
+    const x = (screenX - centerX - panOffset.x) / zoom + centerX;
+    const y = (screenY - centerY - panOffset.y) / zoom + centerY;
+
+    return { x, y };
   };
 
   // Snap to grid if enabled
@@ -138,11 +145,11 @@ const VisionBlocker = ({
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
 
     // Convert to map coordinates
-    const mapPoint = inverseTransformPoint(x, y);
+    const mapPoint = screenToMapCoordinates(screenX, screenY);
     const snappedPoint = snapToGridIfEnabled(mapPoint.x, mapPoint.y);
 
     // Check if clicking on existing block for selection
@@ -175,11 +182,11 @@ const VisionBlocker = ({
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
 
     // Convert to map coordinates
-    const mapPoint = inverseTransformPoint(x, y);
+    const mapPoint = screenToMapCoordinates(screenX, screenY);
     const snappedPoint = snapToGridIfEnabled(mapPoint.x, mapPoint.y);
 
     setCurrentBlock(prev => ({

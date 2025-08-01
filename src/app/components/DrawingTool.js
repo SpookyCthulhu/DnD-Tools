@@ -49,6 +49,18 @@ const DrawingTool = ({
     // Clear canvas
     context.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Apply the same transform as the map
+    context.save();
+    
+    // Get canvas center
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    // Translate to center, scale, then translate back with pan offset
+    context.translate(centerX, centerY);
+    context.scale(zoom, zoom);
+    context.translate(-centerX + panOffset.x / zoom, -centerY + panOffset.y / zoom);
+
     // Draw all paths
     drawings.forEach(path => {
       if (path.points.length < 2) return;
@@ -59,35 +71,33 @@ const DrawingTool = ({
       context.beginPath();
 
       const firstPoint = path.points[0];
-      const transformedStart = transformPoint(firstPoint.x, firstPoint.y);
-      context.moveTo(transformedStart.x, transformedStart.y);
+      context.moveTo(firstPoint.x, firstPoint.y);
 
       path.points.forEach((point, index) => {
         if (index === 0) return;
-        const transformed = transformPoint(point.x, point.y);
-        context.lineTo(transformed.x, transformed.y);
+        context.lineTo(point.x, point.y);
       });
 
       context.stroke();
     });
 
+    context.restore();
     context.globalAlpha = 1;
   }, [drawings, zoom, panOffset]);
 
-  // Transform point based on current zoom and pan
-  const transformPoint = (x, y) => {
-    return {
-      x: (x * zoom) + panOffset.x,
-      y: (y * zoom) + panOffset.y
-    };
-  };
+  // Transform point from screen to map coordinates
+  const screenToMapCoordinates = (screenX, screenY) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
 
-  // Inverse transform point (from screen coordinates to map coordinates)
-  const inverseTransformPoint = (x, y) => {
-    return {
-      x: (x - panOffset.x) / zoom,
-      y: (y - panOffset.y) / zoom
-    };
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    // Reverse the transformation: account for center-based scaling
+    const x = (screenX - centerX - panOffset.x) / zoom + centerX;
+    const y = (screenY - centerY - panOffset.y) / zoom + centerY;
+
+    return { x, y };
   };
 
   // Start drawing
@@ -96,11 +106,11 @@ const DrawingTool = ({
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
 
     // Convert to map coordinates
-    const mapPoint = inverseTransformPoint(x, y);
+    const mapPoint = screenToMapCoordinates(screenX, screenY);
 
     setIsDrawing(true);
     setCurrentPath([mapPoint]);
@@ -112,29 +122,42 @@ const DrawingTool = ({
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
 
     // Convert to map coordinates
-    const mapPoint = inverseTransformPoint(x, y);
+    const mapPoint = screenToMapCoordinates(screenX, screenY);
 
-    setCurrentPath(prev => [...prev, mapPoint]);
+    // Add point to path
+    const newPath = [...currentPath, mapPoint];
+    setCurrentPath(newPath);
 
-    // Draw current stroke
+    // Redraw canvas with current path
+    redrawCanvas();
+
+    // Draw current stroke on top
     const context = contextRef.current;
-    if (currentPath.length > 0) {
+    if (context && currentPath.length > 0) {
+      context.save();
+      
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      
+      context.translate(centerX, centerY);
+      context.scale(zoom, zoom);
+      context.translate(-centerX + panOffset.x / zoom, -centerY + panOffset.y / zoom);
+
       context.globalAlpha = brushOpacity;
       context.strokeStyle = brushColor;
-      context.lineWidth = brushSize * zoom;
+      context.lineWidth = brushSize;
       context.beginPath();
 
       const lastPoint = currentPath[currentPath.length - 1];
-      const transformedLast = transformPoint(lastPoint.x, lastPoint.y);
-      const transformedCurrent = transformPoint(mapPoint.x, mapPoint.y);
-
-      context.moveTo(transformedLast.x, transformedLast.y);
-      context.lineTo(transformedCurrent.x, transformedCurrent.y);
+      context.moveTo(lastPoint.x, lastPoint.y);
+      context.lineTo(mapPoint.x, mapPoint.y);
       context.stroke();
+
+      context.restore();
       context.globalAlpha = 1;
     }
   };
