@@ -9,26 +9,22 @@ const usePanZoom = (initialZoom = 1, initialPanOffset = { x: 0, y: 0 }) => {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
   // Handle pan start
-  const handlePanStart = useCallback((e, draggedToken, isDrawingMode) => {
-    if (draggedToken || isDrawingMode) return false; // Don't pan while dragging token or drawing
-    
+  const handlePanStart = useCallback((e) => {
     setIsPanning(true);
     setPanStart({
       x: e.clientX - panOffset.x,
       y: e.clientY - panOffset.y
     });
-    return true;
   }, [panOffset]);
 
   // Handle mouse move for panning
   const handlePanMove = useCallback((e) => {
-    if (!isPanning) return false;
+    if (!isPanning) return;
     
     setPanOffset({
       x: e.clientX - panStart.x,
       y: e.clientY - panStart.y
     });
-    return true;
   }, [isPanning, panStart]);
 
   // Handle mouse up to stop panning
@@ -36,16 +32,28 @@ const usePanZoom = (initialZoom = 1, initialPanOffset = { x: 0, y: 0 }) => {
     setIsPanning(false);
   }, []);
 
-  // Handle zoom
-  const handleZoom = useCallback((e, isDrawingMode) => {
-    if (isDrawingMode) return false; // Don't zoom in drawing mode
+  // Handle zoom with mouse position
+  const handleZoom = useCallback((e, disabled) => {
+    if (disabled) return;
     
     e.preventDefault();
-    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.5, Math.min(3, zoom * zoomFactor));
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.5, Math.min(6, zoom * delta));
+    
+    // Zoom towards mouse position
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left - rect.width / 2;
+    const y = e.clientY - rect.top - rect.height / 2;
+    
+    const zoomRatio = newZoom / zoom;
+    
+    setPanOffset({
+      x: x + (panOffset.x - x) * zoomRatio,
+      y: y + (panOffset.y - y) * zoomRatio
+    });
+    
     setZoom(newZoom);
-    return true;
-  }, [zoom]);
+  }, [zoom, panOffset]);
 
   // Reset view
   const resetView = useCallback(() => {
@@ -53,12 +61,7 @@ const usePanZoom = (initialZoom = 1, initialPanOffset = { x: 0, y: 0 }) => {
     setPanOffset(initialPanOffset);
   }, [initialZoom, initialPanOffset]);
 
-  // Manual zoom setter
-  const setZoomValue = useCallback((newZoom) => {
-    setZoom(Math.max(0.5, Math.min(3, newZoom)));
-  }, []);
-
-  // Reset to new image
+  // Reset for new image
   const resetForNewImage = useCallback(() => {
     setPanOffset({ x: 0, y: 0 });
     setZoom(1);
@@ -68,7 +71,7 @@ const usePanZoom = (initialZoom = 1, initialPanOffset = { x: 0, y: 0 }) => {
     zoom,
     panOffset,
     isPanning,
-    setZoom: setZoomValue,
+    setZoom,
     setPanOffset,
     handlePanStart,
     handlePanMove,
