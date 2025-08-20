@@ -36,6 +36,9 @@ const Notebook = () => {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const autoSaveTimer = useRef(null);
 
+  // Link references
+  const sidebarHighlightTimeouts = useRef([]);
+
   // Initialize with default campaign structure
   useEffect(() => {
     const savedCampaign = localStorage.getItem('dnd-notebook-campaign');
@@ -75,6 +78,141 @@ const Notebook = () => {
       }
     };
   }, [campaign, isDirty]);
+
+  // Handle navigation from links
+  const handleLinkNavigation = useCallback((link) => {
+    // Clear any existing highlight timeouts
+    sidebarHighlightTimeouts.current.forEach(timeout => clearTimeout(timeout));
+    sidebarHighlightTimeouts.current = [];
+
+    if (link.type === 'chapter') {
+      // Navigate to chapter
+      setSelectedChapterId(link.chapterId);
+      setExpandedNodes(prev => new Set([...prev, link.chapterId]));
+      
+      // Highlight the chapter in sidebar
+      highlightSidebarItem(`chapter-${link.chapterId}`);
+      
+    } else if (link.type === 'section') {
+      // Navigate to section
+      setSelectedChapterId(link.chapterId);
+      setSelectedSectionId(link.sectionId);
+      setExpandedNodes(prev => new Set([...prev, link.chapterId, `${link.chapterId}-${link.sectionId}`]));
+      
+      // Highlight the section in sidebar
+      highlightSidebarItem(`section-${link.sectionId}`);
+      
+    } else if (link.type === 'page') {
+      // Navigate to page
+      setSelectedChapterId(link.chapterId);
+      setSelectedSectionId(link.sectionId);
+      setSelectedPageId(link.pageId);
+      setExpandedNodes(prev => new Set([
+        ...prev, 
+        link.chapterId, 
+        `${link.chapterId}-${link.sectionId}`
+      ]));
+      
+      // Highlight the page in sidebar
+      highlightSidebarItem(`page-${link.pageId}`);
+      
+    } else if (link.type === 'text') {
+      // Navigate to page with text
+      setSelectedChapterId(link.chapterId);
+      setSelectedSectionId(link.sectionId);
+      setSelectedPageId(link.pageId);
+      setExpandedNodes(prev => new Set([
+        ...prev, 
+        link.chapterId, 
+        `${link.chapterId}-${link.sectionId}`
+      ]));
+      
+      // Highlight text after page loads
+      setTimeout(() => {
+        highlightTextInPage(link.highlightText || link.title);
+      }, 100);
+    }
+  }, []);
+
+  // Highlight sidebar item temporarily
+  const highlightSidebarItem = useCallback((itemId) => {
+    setTimeout(() => {
+      const element = document.getElementById(itemId);
+      if (element) {
+        // Scroll into view
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Add highlight class
+        element.classList.add('sidebar-highlight');
+        
+        // Remove highlight after 3 seconds with fade
+        const timeout = setTimeout(() => {
+          element.classList.add('sidebar-highlight-fade');
+          
+          setTimeout(() => {
+            element.classList.remove('sidebar-highlight', 'sidebar-highlight-fade');
+          }, 500);
+        }, 3000);
+        
+        sidebarHighlightTimeouts.current.push(timeout);
+      }
+    }, 100);
+  }, []);
+
+  // Highlight text in the page
+  const highlightTextInPage = useCallback((text) => {
+    if (!text) return;
+    
+    const editorElement = document.querySelector('[contenteditable="true"]');
+    if (!editorElement) return;
+    
+    const walker = document.createTreeWalker(
+      editorElement,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      const nodeText = node.textContent;
+      const index = nodeText.toLowerCase().indexOf(text.toLowerCase());
+      
+      if (index !== -1) {
+        // Create a range and selection
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + text.length);
+        
+        // Highlight the text
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
+        // Add temporary highlight
+        const span = document.createElement('span');
+        span.className = 'text-highlight';
+        range.surroundContents(span);
+        
+        // Scroll to the highlighted text
+        span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Remove highlight after 3 seconds
+        setTimeout(() => {
+          span.classList.add('text-highlight-fade');
+          setTimeout(() => {
+            const parent = span.parentNode;
+            while (span.firstChild) {
+              parent.insertBefore(span.firstChild, span);
+            }
+            parent.removeChild(span);
+          }, 500);
+        }, 3000);
+        
+        break;
+      }
+    }
+  }, []);
 
   // Save campaign to localStorage
   const saveCampaign = useCallback(() => {
@@ -471,7 +609,7 @@ const Notebook = () => {
           }}
         />
 
-        <main className="flex-1 flex flex-col bg-white">
+<main className="flex-1 flex flex-col bg-white">
           {currentPage ? (
             <>
               <div className="border-b px-6 py-3 bg-gray-50">
@@ -489,6 +627,7 @@ const Notebook = () => {
                   content={currentPage.content}
                   onChange={(content) => updatePageContent(selectedChapterId, selectedSectionId, selectedPageId, content)}
                   campaign={campaign}
+                  onNavigateToLink={handleLinkNavigation}
                 />
               </div>
             </>

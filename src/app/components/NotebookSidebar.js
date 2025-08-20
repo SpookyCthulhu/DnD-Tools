@@ -111,6 +111,7 @@ const NotebookSidebar = ({
                   <div key={chapter.id} className="mb-1">
                     {/* Chapter */}
                     <div
+                      id={`chapter-${chapter.id}`}
                       className={`flex items-center px-3 py-1 hover:bg-gray-200 cursor-pointer ${
                         selectedChapterId === chapter.id ? 'bg-blue-100' : ''
                       }`}
@@ -183,6 +184,7 @@ const NotebookSidebar = ({
                         {chapter.sections.map(section => (
                           <div key={section.id}>
                             <div
+                              id={`section-${section.id}`}
                               className={`flex items-center px-3 py-1 hover:bg-gray-200 cursor-pointer ${
                                 selectedSectionId === section.id ? 'bg-blue-50' : ''
                               }`}
@@ -255,6 +257,7 @@ const NotebookSidebar = ({
                                 {section.pages.map(page => (
                                   <div
                                     key={page.id}
+                                    id={`page-${page.id}`}
                                     className={`flex items-center px-3 py-1 hover:bg-gray-200 cursor-pointer ${
                                       selectedPageId === page.id ? 'bg-blue-100 border-l-2 border-blue-500' : ''
                                     }`}
